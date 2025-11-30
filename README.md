@@ -1,0 +1,2 @@
+# LibsodiumBinaries
+Libsodium binaries.
