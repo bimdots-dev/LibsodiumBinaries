@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ '*' ]
+    branches: [ 'main' ]
     tags: [ '*' ]
   pull_request:
     branches: [ main ]
@@ -43,3 +43,10 @@ jobs:
         cp libsodium-1.0.20/build-universal/libsodium.a package/lib/libsodium.a
         cp -r libsodium-1.0.20/src/libsodium/include package/include
         7z a -tzip macos-libsodium-1.0.20-universal.zip ./package/*
+    - name: Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "*.zip"
+        allowUpdates: true
+        token: ${{ secrets.GITHUB_TOKEN }}
