@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [ '*' ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  macos:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+    steps:
+    - name: Get code
+      run: |
+        curl -O https://download.libsodium.org/libsodium/releases/libsodium-1.0.20.tar.gz
+        tar xvf libsodium-1.0.20.tar.gz
+    - name: Build x64
+      run: |
+        cd libsodium-1.0.20
+        mkdir build-x64
+        cd build-x64
+        ../configure CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64" --host=x86_64-apple-darwin
+        make
+    - name: Build arm64
+      run: |
+        cd libsodium-1.0.20
+        mkdir build-arm64
+        cd build-arm64
+        ../configure CFLAGS="-arch arm64" LDFLAGS="-arch arm64" --host=arm-apple-darwin
+        make
+    - name: Create universal binary
+      run: |
+        cd libsodium-1.0.20
+        mkdir build-universal
+        lipo build-x64/src/libsodium/.libs/libsodium.a build-arm64/src/libsodium/.libs/libsodium.a -create -output build-universal/libsodium.a
+    - name: Create zip package
+      run: |
+        mkdir package
+        mkdir package/lib
+        cp libsodium-1.0.20/build-universal/libsodium.a package/lib/libsodium.a
+        cp -r libsodium-1.0.20/src/libsodium/include package/include
+        7z a -tzip macos-libsodium-1.0.20-universal.zip ./package/*

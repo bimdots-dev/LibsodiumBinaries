@@ -1,2 +1,3 @@
-# LibsodiumBinaries
-Libsodium binaries.
+# Libsodium Binaries
+
+Binary files for Libsodium.
