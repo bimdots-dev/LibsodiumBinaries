@@ -103,14 +103,8 @@ jobs:
       with:
         path: artifacts
         merge-multiple: true
-    - name: Extract artifact zips
-      run: |
-        mkdir extracted
-        for zip in artifacts/*.zip; do
-          unzip -o "$zip" -d extracted
-        done
     - name: Create release
       uses: ncipollo/release-action@v1
       with:
-        artifacts: extracted/*
+        artifacts: artifacts/*
         token: ${{ secrets.GITHUB_TOKEN }}
