@@ -7,46 +7,110 @@ on:
   pull_request:
 
 jobs:
-  macos:
-    runs-on: macos-15
+  windows:
+    runs-on: windows-2022
     strategy:
+      matrix:
+        libsodium: [1.0.20, 1.0.21]
       fail-fast: false
     steps:
     - name: Get code
       run: |
-        curl -O https://download.libsodium.org/libsodium/releases/libsodium-1.0.20.tar.gz
-        tar xvf libsodium-1.0.20.tar.gz
-    - name: Build x64
+        curl -O https://download.libsodium.org/libsodium/releases/libsodium-${{matrix.libsodium}}.tar.gz
+        tar xvf libsodium-${{matrix.libsodium}}.tar.gz
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    - name: Switch to MD
+      working-directory: libsodium-${{matrix.libsodium}}
       run: |
-        cd libsodium-1.0.20
+        powershell -Command "(Get-Content builds/msvc/properties/ReleaseLIB.props) -replace '<RuntimeLibrary>MultiThreaded</RuntimeLibrary>', '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>' | Set-Content builds/msvc/properties/ReleaseLIB.props"
+        powershell -Command "if (-not (Select-String -Path builds/msvc/properties/ReleaseLIB.props -Pattern '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>' -Quiet)) { exit 1 }"
+    - name: Build x64 v142
+      working-directory: libsodium-${{matrix.libsodium}}
+      run: |
+        msbuild builds/msvc/vs2022/libsodium.sln /p:Configuration=StaticRelease /p:Platform=x64 /p:PlatformToolset=v142
+    - name: Build x64 v143
+      working-directory: libsodium-${{matrix.libsodium}}
+      run: |
+        msbuild builds/msvc/vs2022/libsodium.sln /p:Configuration=StaticRelease /p:Platform=x64 /p:PlatformToolset=v143
+    - name: Create zip package
+      run: |
+        mkdir package
+        mkdir package/lib
+        mkdir package/lib/v142
+        mkdir package/lib/v143
+        cp -r libsodium-${{matrix.libsodium}}/src/libsodium/include package/include
+        cp libsodium-${{matrix.libsodium}}/bin/x64/Release/v142/static/* package/lib/v142
+        cp libsodium-${{matrix.libsodium}}/bin/x64/Release/v143/static/* package/lib/v143
+        7z a -tzip windows-libsodium-${{matrix.libsodium}}-static-x64-md.zip ./package/*
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-libsodium-${{matrix.libsodium}}
+        path: windows-libsodium-${{matrix.libsodium}}-static-x64-md.zip
+  
+  macos:
+    runs-on: macos-15
+    strategy:
+      matrix:
+        libsodium: [1.0.20, 1.0.21]
+      fail-fast: false
+    steps:
+    - name: Get code
+      run: |
+        curl -O https://download.libsodium.org/libsodium/releases/libsodium-${{matrix.libsodium}}.tar.gz
+        tar xvf libsodium-${{matrix.libsodium}}.tar.gz
+    - name: Build x64
+      working-directory: libsodium-${{matrix.libsodium}}
+      run: |
         mkdir build-x64
         cd build-x64
         ../configure CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64" --host=x86_64-apple-darwin
         make
     - name: Build arm64
+      working-directory: libsodium-${{matrix.libsodium}}
       run: |
-        cd libsodium-1.0.20
         mkdir build-arm64
         cd build-arm64
         ../configure CFLAGS="-arch arm64" LDFLAGS="-arch arm64" --host=arm-apple-darwin
         make
     - name: Create universal binary
+      working-directory: libsodium-${{matrix.libsodium}}
       run: |
-        cd libsodium-1.0.20
         mkdir build-universal
         lipo build-x64/src/libsodium/.libs/libsodium.a build-arm64/src/libsodium/.libs/libsodium.a -create -output build-universal/libsodium.a
     - name: Create zip package
       run: |
         mkdir package
         mkdir package/lib
-        cp -r libsodium-1.0.20/src/libsodium/include package/include
-        cp libsodium-1.0.20/build-universal/libsodium.a package/lib/libsodium.a
-        cp libsodium-1.0.20/build-arm64/src/libsodium/include/sodium/* package/include/sodium
-        7z a -tzip macos-libsodium-1.0.20-universal.zip ./package/*
-    - name: Release
-      if: startsWith(github.ref, 'refs/tags/')
+        cp -r libsodium-${{matrix.libsodium}}/src/libsodium/include package/include
+        cp libsodium-${{matrix.libsodium}}/build-universal/libsodium.a package/lib/libsodium.a
+        cp libsodium-${{matrix.libsodium}}/build-arm64/src/libsodium/include/sodium/* package/include/sodium
+        7z a -tzip macos-libsodium-${{matrix.libsodium}}-static-universal.zip ./package/*
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-libsodium-${{matrix.libsodium}}
+        path: macos-libsodium-${{matrix.libsodium}}-static-universal.zip
+
+  create_release:
+    runs-on: ubuntu-22.04
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+    - name: Extract artifact zips
+      run: |
+        mkdir extracted
+        for zip in artifacts/*.zip; do
+          unzip -o "$zip" -d extracted
+        done
+    - name: Create release
       uses: ncipollo/release-action@v1
       with:
-        artifacts: "*.zip"
-        allowUpdates: true
+        artifacts: extracted/*
         token: ${{ secrets.GITHUB_TOKEN }}
