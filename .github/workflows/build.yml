@@ -65,14 +65,14 @@ jobs:
       run: |
         mkdir build-x64
         cd build-x64
-        ../configure CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64" --host=x86_64-apple-darwin
+        ../configure CFLAGS="-arch x86_64 -mmacosx-version-min=10.15" LDFLAGS="-arch x86_64 -mmacosx-version-min=10.15" --host=x86_64-apple-darwin
         make
     - name: Build arm64
       working-directory: libsodium-${{matrix.libsodium}}
       run: |
         mkdir build-arm64
         cd build-arm64
-        ../configure CFLAGS="-arch arm64" LDFLAGS="-arch arm64" --host=arm-apple-darwin
+        ../configure CFLAGS="-arch arm64 -mmacosx-version-min=10.15" LDFLAGS="-arch arm64 -mmacosx-version-min=10.15" --host=arm-apple-darwin
         make
     - name: Create universal binary
       working-directory: libsodium-${{matrix.libsodium}}
